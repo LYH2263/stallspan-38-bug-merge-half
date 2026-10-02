@@ -15,10 +15,9 @@ def _compute(segment_id: int, db: Session) -> dict:
     if not seg: raise HTTPException(404, "街段不存在")
     pillars = [{"position_m": p.position_m, "thickness_m": p.thickness_m}
                for p in db.scalars(select(Pillar).where(Pillar.segment_id == segment_id)).all()]
-    # 已合并退出的摊仍参与落位 → 列表标 merged，图上旧摊还在
     vendors = [{"id": v.id, "name": v.name, "stall_width_m": v.stall_width_m, "priority": v.priority}
                for v in db.scalars(select(Vendor).where(Vendor.market_day_id == seg.market_day_id)).all()
-               if v.status in ("active", "merged")]
+               if v.status == "active"]
     result = result_to_dict(allocate_first_fit(seg.width_m, vendors, pillars))
     result["segment"] = {"id": seg.id, "name": seg.name, "width_m": seg.width_m}
     result["pillars"] = pillars
