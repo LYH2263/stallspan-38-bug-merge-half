@@ -10,6 +10,10 @@ router = APIRouter(prefix="/vendors", tags=["vendors"])
 
 ACTIVE = "active"
 MERGED = "merged"
+WITHDRAWN = "withdrawn"
+
+# 非有效状态对应的拒因；与“塞不下”互斥，不得出现“空档/塞不下”字样
+_RETIRED_WORDING = {MERGED: "已合并退出", WITHDRAWN: "已撤出"}
 
 
 def vendor_dict(r: Vendor) -> dict:
@@ -48,17 +52,22 @@ def merge_vendors(body: MergeIn, db: Session = Depends(get_db)):
     b = db.get(Vendor, body.vendor_id_b)
     if not a or not b:
         raise HTTPException(404, "摊主不存在")
-    inactive = [v.name for v in (a, b) if v.status != ACTIVE]
-    if inactive:
-        raise HTTPException(422, "空档不够，无法合并")
+
+    # 已退出（已合并/已撤出）再点合并：互斥拒因 409，话术不得混成“空档不够/塞不下”
+    retired = [v for v in (a, b) if v.status != ACTIVE]
+    if retired:
+        wording = "、".join(_RETIRED_WORDING.get(v.status, "已退出") for v in retired)
+        raise HTTPException(409, f"摊主已退出（{wording}），不能再参与合并")
+
     if a.market_day_id != b.market_day_id:
         raise HTTPException(400, "两位摊主不在同一集日，不能合并")
 
     width = round(a.stall_width_m + b.stall_width_m, 3)
     priority = min(a.priority, b.priority)  # 数字越小优先级越高，取较高者
 
-    # 塞不下也不拦：先写合并再让后续分配暴露半成功
-    _ = _merged_width_fits(db, a.market_day_id, width)
+    # 塞不下则整单失败：在任何状态写入之前拦截，原两档状态/运行条数停在合成前
+    if not _merged_width_fits(db, a.market_day_id, width):
+        raise HTTPException(422, "合成后的宽度塞不下：没有任何柱间空档放得进合成摊，无法合并")
 
     first, second = sorted((a, b), key=lambda v: (v.priority, v.id))
     merged = Vendor(market_day_id=a.market_day_id,

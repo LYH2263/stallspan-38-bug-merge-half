@@ -4,18 +4,22 @@ import { api } from '../api'
 const data = ref<any>(null)
 const vendors = ref<any[]>([])
 const mode = ref<'preview' | 'confirmed'>('preview')
+async function loadVendors() {
+  // 三口只认合成后的有效摊；每次现算/确认都重取，禁止吃合成前两档的旧队列
+  vendors.value = (await api('/vendors')).filter((v: any) => v.status === 'active')
+}
 async function preview() {
   data.value = await api('/allocate/preview?segment_id=1', { method: 'POST' })
   mode.value = 'preview'
+  await loadVendors()
 }
 async function confirm() {
+  // 确认按提交瞬间刚保存的合成结果重算（服务端即时算并落库一条运行行）
   data.value = await api('/allocate/run?segment_id=1', { method: 'POST' })
   mode.value = 'confirmed'
+  await loadVendors()
 }
-onMounted(async () => {
-  vendors.value = (await api('/vendors')).filter((v: any) => v.status === 'active')
-  await preview()
-})
+onMounted(preview)
 const colors = ['#e8a87c','#85dcb8','#e27d60','#c38d9e','#41b3a3','#f4a261','#e76f51']
 const cells = computed(() => {
   if (!data.value) return []

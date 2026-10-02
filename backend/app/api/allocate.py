@@ -10,15 +10,19 @@ router = APIRouter(prefix="/allocate", tags=["allocate"])
 
 
 def _compute(segment_id: int, db: Session) -> dict:
-    """按当前摊主表现算；只纳入仍有效(active)摊主，已合并退出的不再点名。"""
+    """按当前摊主表现算；只纳入仍有效(active)摊主，已合并退出(merged)的不再点名。
+
+    每次都从库内即时重算：确认开间以提交瞬间刚保存的合成结果为准，
+    不吃合成前两档的任何缓存。
+    """
     seg = db.get(Segment, segment_id)
     if not seg: raise HTTPException(404, "街段不存在")
     pillars = [{"position_m": p.position_m, "thickness_m": p.thickness_m}
                for p in db.scalars(select(Pillar).where(Pillar.segment_id == segment_id)).all()]
-    # 已合并退出的摊仍参与落位 → 列表标 merged，图上旧摊还在
+    # 三口（列表/主图/放不下）只认合成后的有效摊：merged 退出摊彻底不参与落位与点名
     vendors = [{"id": v.id, "name": v.name, "stall_width_m": v.stall_width_m, "priority": v.priority}
                for v in db.scalars(select(Vendor).where(Vendor.market_day_id == seg.market_day_id)).all()
-               if v.status in ("active", "merged")]
+               if v.status == "active"]
     result = result_to_dict(allocate_first_fit(seg.width_m, vendors, pillars))
     result["segment"] = {"id": seg.id, "name": seg.name, "width_m": seg.width_m}
     result["pillars"] = pillars

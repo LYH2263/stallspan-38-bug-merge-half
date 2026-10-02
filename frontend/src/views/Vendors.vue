@@ -10,6 +10,9 @@ const busy = ref(false)
 const active = computed(() => rows.value.filter(r => r.status === 'active'))
 const retired = computed(() => rows.value.filter(r => r.status !== 'active'))
 async function load() { rows.value = await api('/vendors') }
+function statusLabel(status: string): string {
+  return status === 'active' ? '有效' : status === 'withdrawn' ? '已撤出' : '已合并退出'
+}
 function detailOf(e: any): string {
   try { return JSON.parse(e.message).detail || e.message } catch { return e.message || '合并失败' }
 }
@@ -46,7 +49,7 @@ onMounted(load)
     </div>
     <div v-for="r in retired" :key="r.id" class="ss-vendor-chip ss-chip-merged">
       <strong>{{ r.name }}</strong>
-      <span class="badge badge-warn">有效</span>
+      <span class="badge badge-warn">{{ statusLabel(r.status) }}</span>
     </div>
   </div>
   <div class="card ss-merge-bar">
@@ -72,7 +75,7 @@ onMounted(load)
         <tr v-for="r in rows" :key="r.id" :class="{ 'ss-row-merged': r.status !== 'active' }">
           <td>{{ r.name }}</td><td>{{ r.stall_width_m }}</td><td>{{ r.priority }}</td>
           <td><span v-if="r.status === 'active'" class="badge badge-ok">有效</span>
-              <span v-else class="badge badge-warn">有效</span></td>
+              <span v-else class="badge badge-warn">{{ statusLabel(r.status) }}</span></td>
         </tr>
       </tbody>
     </table>
